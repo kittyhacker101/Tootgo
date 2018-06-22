@@ -37,7 +37,7 @@ var (
 
 func download(session *geddit.LoginSession, status *twitter.StatusService, media *twitter.MediaService) {
 	var posts []string
-	submissions, err := session.SubredditSubmissions(conf.Reddit.Mon, geddit.NewSubmissions, geddit.ListingOptions{
+	submissions, err := session.SubredditSubmissions(conf.Reddit.Mon, geddit.HotSubmissions, geddit.ListingOptions{
 		Limit: 25,
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 			fmt.Println("Unable to upload media!")
 		}
 		os.Remove(s.ID + ".png")
-		
+
 		_, _, err = status.Update(s.Title+" https://redd.it/"+s.ID, &twitter.StatusUpdateParams{
 			MediaIds:          []int64{img.MediaID},
 			PossiblySensitive: &s.IsNSFW,

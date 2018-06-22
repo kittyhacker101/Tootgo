@@ -38,7 +38,7 @@ var (
 func download(session *geddit.LoginSession, status *twitter.StatusService, media *twitter.MediaService) {
 	var posts []string
 	submissions, err := session.SubredditSubmissions(conf.Reddit.Mon, geddit.HotSubmissions, geddit.ListingOptions{
-		Limit: 25,
+		Limit: 50,
 	})
 	if err != nil {
 		fmt.Println("Unable to get subreddit posts!")

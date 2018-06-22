@@ -1,0 +1,14 @@
+{
+	"reddit": {
+		"username": "Reddit Username",
+		"password": "Reddit Password",
+		"subreddit": "Subreddit to mirror",
+		"interval": 1
+	},
+	"twitter": {
+		"token": "Twitter Access Token",
+		"tokensecret": "Twitter Access Token Secret",
+		"key": "Twitter API Key",
+		"keysecret": "Twitter API Secret"
+	}
+}

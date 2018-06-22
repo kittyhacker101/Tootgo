@@ -76,7 +76,14 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "imgur.com/") + ".jpg"
 		}
 		if link == "none" {
-			fmt.Println("Unable to find image in post!")
+			fmt.Println("Linking https://redd.it/" + s.ID + "... | Post depth : " + strconv.Itoa(d+1))
+			_, _, err = status.Update(s.Title+" https://redd.it/"+s.ID, &twitter.StatusUpdateParams{
+				PossiblySensitive: &s.IsNSFW,
+			})
+			if err != nil {
+				fmt.Println("Unable to post tweet!")
+			}
+			fmt.Println("Link posted to Twitter!")
 			return
 		}
 

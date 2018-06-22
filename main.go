@@ -90,18 +90,20 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		}
 
 		// I'll name it a .png even if it isn't, and let Twitter sort it out ¯\_(ツ)_/¯
-		f, err = os.Create(s.ID + ".png")
+		f, err = os.Create(os.TempDir() + "/" + s.ID + ".png")
 		if err != nil {
 			fmt.Println("Unable to write response!")
+			return
 		}
 		f.Write(body)
 		f.Close()
 
-		img, _, err := media.UploadFile(s.ID + ".png")
+		img, _, err := media.UploadFile(os.TempDir() + "/" + s.ID + ".png")
 		if err != nil {
 			fmt.Println("Unable to upload media!")
+			return
 		}
-		os.Remove(s.ID + ".png")
+		os.Remove(os.TempDir() + "/" + s.ID + ".png")
 
 		_, _, err = status.Update(s.Title+" https://redd.it/"+s.ID, &twitter.StatusUpdateParams{
 			MediaIds:          []int64{img.MediaID},
@@ -110,6 +112,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		if err != nil {
 			fmt.Println("Unable to post tweet!")
 		}
+		fmt.Println("Image posted to Twitter!")
 
 		return
 	}

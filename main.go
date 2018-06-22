@@ -72,6 +72,9 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		if strings.HasPrefix(s.URL, "https://imgur.com/") {
 			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "https://imgur.com/") + ".jpg"
 		}
+		if strings.HasPrefix(s.URL, "imgur.com/") {
+			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "imgur.com/") + ".jpg"
+		}
 		if link == "none" {
 			fmt.Println("Unable to find image in post!")
 			return
@@ -143,6 +146,8 @@ func main() {
 	token := oauth1.NewToken(conf.Twitter.Token, conf.Twitter.ToknS)
 	httpClient := config.Client(oauth1.NoContext, token)
 	client := twitter.NewClient(httpClient)
+
+	download(session, client.Statuses, client.Media)
 
 	ticker := time.NewTicker(time.Minute * time.Duration(conf.Reddit.Time))
 	for {

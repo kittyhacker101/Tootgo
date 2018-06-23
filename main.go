@@ -98,6 +98,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 			fmt.Println("Unable to read response!")
 			return
 		}
+		resp.Body.Close()
 
 		// I'll name it a .png even if it isn't, and let Twitter sort it out ¯\_(ツ)_/¯
 		f, err = os.Create(os.TempDir() + "/" + s.ID + ".png")

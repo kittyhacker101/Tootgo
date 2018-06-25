@@ -65,15 +65,15 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		f.Close()
 
 		link := "none"
-		fmt.Println(s.Title + " https://redd.it/" + s.ID)
+		fmt.Println(s.Title + " https://redd.it/" + s.ID + " (Link : " + s.URL + ")")
 		if strings.HasSuffix(s.URL, ".png") || strings.HasSuffix(s.URL, ".jpg") || strings.HasSuffix(s.URL, ".gif") {
 			link = s.URL
 		}
+		if strings.HasPrefix(s.URL, "http://imgur.com/") {
+			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "http://imgur.com/") + ".jpg"
+		}
 		if strings.HasPrefix(s.URL, "https://imgur.com/") {
 			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "https://imgur.com/") + ".jpg"
-		}
-		if strings.HasPrefix(s.URL, "imgur.com/") {
-			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "imgur.com/") + ".jpg"
 		}
 		if link == "none" {
 			fmt.Println("Linking https://redd.it/" + s.ID + "... | Post depth : " + strconv.Itoa(d+1))

@@ -21,13 +21,15 @@ type Conf struct {
 		User string `json:"username"`
 		Pass string `json:"password"`
 		Mon  string `json:"subreddit"`
-		Time int    `json:"interval"`
+		Time float64 `json:"interval"`
+		Adj bool `json:"allowoffset"`
 	} `json:"reddit"`
 	Twitter struct {
 		Token string `json:"token"`
 		ToknS string `json:"tokensecret"`
 		Conk  string `json:"key"`
 		Cons  string `json:"keysecret"`
+		Minu  int `json:"minuprate"`
 	} `json:"twitter"`
 }
 
@@ -50,6 +52,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		fmt.Println("Unable to load database!")
 		return
 	}
+
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		posts = append(posts, scanner.Text())
@@ -60,6 +63,23 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		i := sort.SearchStrings(posts, s.ID)
 		if i < len(posts) && posts[i] == s.ID {
 			continue
+		}
+		if conf.Reddit.Adj {
+			upv := s.Ups / int(time.Since(time.Unix(int64(s.DateCreated), 0)).Hours())
+			fmt.Println("Upvotes/hour : " + strconv.Itoa(upv) + " | Post timing : " + strconv.FormatFloat(conf.Reddit.Time, 'f', -1, 64))
+			switch {
+			case d <= 30:
+				conf.Reddit.Time = conf.Reddit.Time - 0.1
+			case d < 35:
+				conf.Reddit.Time = conf.Reddit.Time - 0.05
+			case d > 40:
+				conf.Reddit.Time = conf.Reddit.Time + 0.05
+			case d >= 45:
+				conf.Reddit.Time = conf.Reddit.Time + 0.1
+			case upv < conf.Twitter.Minu:
+				fmt.Println("Post https://redd.it/" + s.ID + " has been skipped!")
+				continue
+			}
 		}
 		f.WriteString(s.ID + "\n")
 		f.Close()
@@ -162,6 +182,8 @@ func main() {
 		select {
 		case <-ticker.C:
 			download(session, client.Statuses, client.Media)
+			ticker.Stop()
+			ticker = time.NewTicker(time.Minute * time.Duration(conf.Reddit.Time))
 		}
 	}
 }

@@ -3,12 +3,14 @@
 		"username": "Reddit Username",
 		"password": "Reddit Password",
 		"subreddit": "Subreddit to mirror",
-		"interval": 1
+		"interval": 1,
+		"allowoffset": false
 	},
 	"twitter": {
 		"token": "Twitter Access Token",
 		"tokensecret": "Twitter Access Token Secret",
 		"key": "Twitter API Key",
-		"keysecret": "Twitter API Secret"
+		"keysecret": "Twitter API Secret",
+		"minuprate": 2
 	}
 }

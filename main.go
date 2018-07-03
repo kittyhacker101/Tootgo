@@ -40,7 +40,7 @@ var (
 func download(session *geddit.LoginSession, status *twitter.StatusService, media *twitter.MediaService) {
 	var posts []string
 	submissions, err := session.SubredditSubmissions(conf.Reddit.Mon, geddit.HotSubmissions, geddit.ListingOptions{
-		Limit: 50,
+		Limit: 55,
 	})
 	if err != nil {
 		fmt.Println("Unable to get subreddit posts!")
@@ -65,18 +65,22 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 			continue
 		}
 		if conf.Reddit.Adj {
-			upv := s.Ups / int(time.Since(time.Unix(int64(s.DateCreated), 0)).Hours())
-			fmt.Println("Upvotes/hour : " + strconv.Itoa(upv) + " | Post timing : " + strconv.FormatFloat(conf.Reddit.Time, 'f', -1, 64))
+			upv := float64(s.Ups) / time.Since(time.Unix(int64(s.DateCreated), 0)).Hours()
+			fmt.Println("Upvotes/hour : " + strconv.Itoa(int(upv)) + " | Post timing : " + strconv.FormatFloat(conf.Reddit.Time, 'f', -1, 64))
 			switch {
+			case d <= 25:
+				conf.Reddit.Time = conf.Reddit.Time - 0.2
 			case d <= 30:
 				conf.Reddit.Time = conf.Reddit.Time - 0.1
 			case d < 35:
 				conf.Reddit.Time = conf.Reddit.Time - 0.05
-			case d > 40:
-				conf.Reddit.Time = conf.Reddit.Time + 0.05
+			case d >= 50:
+				conf.Reddit.Time = conf.Reddit.Time + 0.2
 			case d >= 45:
 				conf.Reddit.Time = conf.Reddit.Time + 0.1
-			case upv < conf.Twitter.Minu:
+			case d > 40:
+				conf.Reddit.Time = conf.Reddit.Time + 0.05
+			case int(upv) < conf.Twitter.Minu:
 				fmt.Println("Post https://redd.it/" + s.ID + " has been skipped!")
 				continue
 			}

@@ -1,249 +1,199 @@
-// KatWeb by kittyhacker101 - Webview Control Panel
 package main
 
 import (
 	"bufio"
-	"flag"
+	"encoding/json"
 	"fmt"
-	"github.com/gorilla/websocket"
-	"github.com/grafov/bcast"
-	"github.com/shirou/gopsutil/process"
-	"github.com/skratchdot/open-golang/open"
-	"github.com/zserge/webview"
-	"math"
+	"github.com/dghubble/oauth1"
+	"github.com/jzelinskie/geddit"
+	"github.com/lkramer/go-twitter/twitter"
+	"io/ioutil"
 	"net/http"
 	"os"
-	"os/exec"
-	"os/signal"
-	"path/filepath"
-	"runtime"
+	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
-const katloc = ".."
+type Conf struct {
+	Reddit struct {
+		User string `json:"username"`
+		Pass string `json:"password"`
+		Mon  string `json:"subreddit"`
+		Time float64 `json:"interval"`
+		Adj bool `json:"allowoffset"`
+	} `json:"reddit"`
+	Twitter struct {
+		Token string `json:"token"`
+		ToknS string `json:"tokensecret"`
+		Conk  string `json:"key"`
+		Cons  string `json:"keysecret"`
+		Minu  int `json:"minuprate"`
+	} `json:"twitter"`
+}
 
 var (
-	upgrader = websocket.Upgrader{}
-	srv      = &http.Server{
-		Addr:    "127.0.0.1:8090",
-		Handler: http.HandlerFunc(guiHandle),
-	}
-	katchan = make(chan string)
-	katctrl = make(chan string)
-	load    bool
-	katstat bool
-	guicast = bcast.NewGroup()
-	noui    = flag.Bool("headless", false, "Launch only the web GUI, don't launch the webview interface.")
+	conf Conf
 )
 
-func guiHandle(w http.ResponseWriter, r *http.Request) {
-	load = true
-	if !strings.HasSuffix(r.URL.EscapedPath(), "/socket") {
-		http.ServeFile(w, r, "index.html")
-		return
-	}
-
-	c, err := upgrader.Upgrade(w, r, nil)
+func download(session *geddit.LoginSession, status *twitter.StatusService, media *twitter.MediaService) {
+	var posts []string
+	submissions, err := session.SubredditSubmissions(conf.Reddit.Mon, geddit.HotSubmissions, geddit.ListingOptions{
+		Limit: 60,
+	})
 	if err != nil {
-		http.Error(w, "Unable to upgrade websocket!", http.StatusInternalServerError)
+		fmt.Println("Unable to get subreddit posts!")
 		return
 	}
-	defer c.Close()
 
-	go func() {
-		var message []byte
-		for {
-			_, message, err = c.ReadMessage()
-			if err != nil {
-				return
-			}
-			katctrl <- string(message)
+	f, err := os.OpenFile("posts.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		fmt.Println("Unable to load database!")
+		return
+	}
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		posts = append(posts, scanner.Text())
+	}
+	sort.Strings(posts)
+
+	for d, s := range submissions {
+		i := sort.SearchStrings(posts, s.ID)
+		if i < len(posts) && posts[i] == s.ID {
+			continue
 		}
-	}()
+		if conf.Reddit.Adj {
+			upv := float64(s.Ups) / time.Since(time.Unix(int64(s.DateCreated), 0)).Hours()
+			fmt.Println("Upvotes/hour : " + strconv.Itoa(int(upv)) + " | Post timing : " + strconv.FormatFloat(conf.Reddit.Time, 'f', -1, 64))
+			switch {
+			case d <= 15:
+				conf.Reddit.Time = conf.Reddit.Time - 0.8
+			case d <= 20:
+				conf.Reddit.Time = conf.Reddit.Time - 0.4
+			case d <= 25:
+				conf.Reddit.Time = conf.Reddit.Time - 0.2
+			case d <= 30:
+				conf.Reddit.Time = conf.Reddit.Time - 0.1
+			case d < 35:
+				conf.Reddit.Time = conf.Reddit.Time - 0.05
+			case d >= 55:
+				conf.Reddit.Time = conf.Reddit.Time + 0.4
+			case d >= 50:
+				conf.Reddit.Time = conf.Reddit.Time + 0.2
+			case d >= 45:
+				conf.Reddit.Time = conf.Reddit.Time + 0.1
+			case d > 40:
+				conf.Reddit.Time = conf.Reddit.Time + 0.05
+			case int(upv) < conf.Twitter.Minu:
+				fmt.Println("Post https://redd.it/" + s.ID + " has been skipped!")
+				continue
+			}
+		}
+		f.WriteString(s.ID + "\n")
+		f.Close()
 
-	if katstat {
-		err = c.WriteMessage(websocket.TextMessage, []byte("start"))
-	} else {
-		err = c.WriteMessage(websocket.TextMessage, []byte("stop"))
-	}
-	if err != nil {
-		return
-	}
-
-	member := guicast.Join()
-	for {
-		data := member.Recv().(string)
-		if c.WriteMessage(websocket.TextMessage, []byte(data)) != nil {
+		link := "none"
+		fmt.Println(s.Title + " https://redd.it/" + s.ID + " (Link : " + s.URL + ")")
+		if strings.HasSuffix(s.URL, ".png") || strings.HasSuffix(s.URL, ".jpg") || strings.HasSuffix(s.URL, ".gif") {
+			link = s.URL
+		}
+		if strings.HasPrefix(s.URL, "http://imgur.com/") {
+			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "http://imgur.com/") + ".jpg"
+		}
+		if strings.HasPrefix(s.URL, "https://imgur.com/") {
+			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "https://imgur.com/") + ".jpg"
+		}
+		if link == "none" {
+			fmt.Println("Linking https://redd.it/" + s.ID + "... | Post depth : " + strconv.Itoa(d+1))
+			_, _, err = status.Update(s.Title+" https://redd.it/"+s.ID, &twitter.StatusUpdateParams{
+				PossiblySensitive: &s.IsNSFW,
+			})
+			if err != nil {
+				fmt.Println("Unable to post tweet!")
+			}
+			fmt.Println("Link posted to Twitter!")
 			return
 		}
-	}
 
-}
-
-func floatToString(i float64) string {
-	return strconv.FormatFloat(math.Round(i*10)/10, 'f', -1, 64)
-}
-
-func manageKatWeb() {
-	var (
-		katweb *os.Process
-		katcon *bufio.Scanner
-	)
-
-	go func() {
-		for {
-			if !katstat {
-				time.Sleep(1 * time.Second)
-				continue
-			}
-			for katcon.Scan() {
-				katchan <- katcon.Text()
-			}
+		fmt.Println("Downloading " + link + "... | Post depth : " + strconv.Itoa(d+1))
+		resp, err := http.Get(link)
+		if err != nil {
+			fmt.Println("Unable to download image!")
+			return
 		}
-	}()
-
-	go func() {
-		for {
-			time.Sleep(1 * time.Second)
-			if !katstat {
-				continue
-			}
-
-			proc, err := process.NewProcess(int32(katweb.Pid))
-			if err != nil {
-				continue
-			}
-
-			cpu, err := proc.CPUPercent()
-			if err != nil {
-				continue
-			}
-
-			mem, err := proc.MemoryInfo()
-			if err != nil {
-				continue
-			}
-
-			katchan <- floatToString(cpu) + "% Avg CPU | " + floatToString(float64(mem.RSS)/1000000) + "mb RAM | PID : " + strconv.Itoa(katweb.Pid)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			fmt.Println("Unable to read response!")
+			return
 		}
-	}()
+		resp.Body.Close()
 
-	for {
-		data := <-katctrl
-		if data == "stop" || data == "kill" || data == "restart" {
-			if katstat {
-				katweb.Signal(syscall.SIGTERM)
-				katweb.Wait()
-				katstat = false
-			}
-			katchan <- "clear"
-			time.Sleep(250 * time.Millisecond)
+		// I'll name it a .png even if it isn't, and let Twitter sort it out ¯\_(ツ)_/¯
+		f, err = os.Create(os.TempDir() + "/" + s.ID + ".png")
+		if err != nil {
+			fmt.Println("Unable to write response!")
+			return
 		}
-		if data == "start" || data == "restart" {
-			os := runtime.GOARCH
-			if os == "386" {
-				os = "i386"
-			}
+		f.Write(body)
+		f.Close()
 
-			c := exec.Command(katloc+"/katweb-"+runtime.GOOS+"-"+os, "-root="+katloc)
-			stdout, err := c.StdoutPipe()
-			if err != nil {
-				katchan <- "[Panel] : Unable to start katweb!"
-				katchan <- "stop"
-				katstat = false
-				continue
-			}
+		img, _, err := media.UploadFile(os.TempDir() + "/" + s.ID + ".png")
+		if err != nil {
+			fmt.Println("Unable to upload media!")
+			return
+		}
+		os.Remove(os.TempDir() + "/" + s.ID + ".png")
 
-			katcon = bufio.NewScanner(stdout)
-			if c.Start() != nil {
-				katchan <- "[Panel] : Unable to connect to katweb!"
-				katchan <- "stop"
-				katstat = false
-				continue
-			}
+		_, _, err = status.Update(s.Title+" https://redd.it/"+s.ID, &twitter.StatusUpdateParams{
+			MediaIds:          []int64{img.MediaID},
+			PossiblySensitive: &s.IsNSFW,
+		})
+		if err != nil {
+			fmt.Println("Unable to post tweet!")
+		}
+		fmt.Println("Image posted to Twitter!")
 
-			katweb = c.Process
-			katchan <- "start"
-			katchan <- "[Panel] : KatWeb started with pid " + strconv.Itoa(katweb.Pid) + "."
-			katstat = true
-			go func() {
-				katweb.Wait()
-				katchan <- "stop"
-				katchan <- "[Panel] : KatWeb has stopped running!"
-				katstat = false
-			}()
-		}
-		if data == "kill" {
-			os.Exit(0)
-		}
-		if data == "reload" {
-			if katweb != nil {
-				katweb.Signal(syscall.SIGHUP)
-			}
-		}
-		if data == "folder" {
-			if *noui {
-				abs, err := filepath.Abs(filepath.Dir(katloc + "/"))
-				if err != nil {
-					katchan <- "[Panel] : Unable to get KatWeb's working directory!"
-				} else {
-					katchan <- "[Panel] : KatWeb's working directory is " + abs
-				}
-				continue
-			}
-			if open.Start(katloc+"/") != nil {
-				katchan <- "[Panel] : Unable to open KatWeb folder!"
-			}
-		}
-		if data == "config" {
-			if *noui {
-				katchan <- "[Panel] : Applications cannot be launched while the GUI is in headless mode."
-				continue
-			}
-			if open.Start(katloc+"/conf.json") != nil {
-				katchan <- "[Panel] : Unable to open KatWeb configuration!"
-			}
-		}
+		return
 	}
 }
 
 func main() {
-	go func() {
-		if srv.ListenAndServe() != nil {
-			fmt.Println("Unable to start GUI backend!")
-			os.Exit(1)
+	data, err := ioutil.ReadFile("conf.json")
+	if err != nil {
+		fmt.Println("Unable to read config file!")
+		return
+	}
+	if json.Unmarshal(data, &conf) != nil {
+		fmt.Println("Unable to parse config file!")
+		return
+	}
+
+	session, err := geddit.NewLoginSession(
+		conf.Reddit.User,
+		conf.Reddit.Pass,
+		"Tootgo",
+	)
+	if err != nil {
+		fmt.Println("Unable to login to Reddit!")
+		return
+	}
+
+	config := oauth1.NewConfig(conf.Twitter.Conk, conf.Twitter.Cons)
+	token := oauth1.NewToken(conf.Twitter.Token, conf.Twitter.ToknS)
+	httpClient := config.Client(oauth1.NoContext, token)
+	client := twitter.NewClient(httpClient)
+
+	download(session, client.Statuses, client.Media)
+
+	ticker := time.NewTicker(time.Minute * time.Duration(conf.Reddit.Time))
+	for {
+		select {
+		case <-ticker.C:
+			download(session, client.Statuses, client.Media)
+			ticker.Stop()
+			ticker = time.NewTicker(time.Minute * time.Duration(conf.Reddit.Time))
 		}
-	}()
-	go func() {
-		flag.Parse()
-		katctrl <- "start"
-		if *noui {
-			fmt.Println("GUI server started on port :8090!")
-			c := make(chan os.Signal, 2)
-			signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-			<-c
-		} else {
-			webview.New(webview.Settings{
-				Title:     "KatWeb Control Panel",
-				URL:       "http://localhost:8090",
-				Width:     448,
-				Height:    436,
-				Resizable: true,
-				Debug:     true,
-			}).Run()
-		}
-		katctrl <- "kill"
-	}()
-	go guicast.Broadcast(0)
-	go func() {
-		time.Sleep(1 * time.Second)
-		for {
-			val := <-katchan
-			guicast.Send(val)
-		}
-	}()
-	manageKatWeb()
+	}
 }

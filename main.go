@@ -99,6 +99,9 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		if strings.HasSuffix(s.URL, ".png") || strings.HasSuffix(s.URL, ".jpg") || strings.HasSuffix(s.URL, ".gif") {
 			link = s.URL
 		}
+		if strings.HasSuffix(s.URL, ".gifv") {
+			link = strings.TrimSuffix(s.URL, ".gifv") + ".gif"
+		}
 		if strings.HasPrefix(s.URL, "http://imgur.com/") {
 			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "http://imgur.com/") + ".jpg"
 		}

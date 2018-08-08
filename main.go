@@ -18,18 +18,18 @@ import (
 
 type Conf struct {
 	Reddit struct {
-		User string `json:"username"`
-		Pass string `json:"password"`
-		Mon  string `json:"subreddit"`
+		User string  `json:"username"`
+		Pass string  `json:"password"`
+		Mon  string  `json:"subreddit"`
 		Time float64 `json:"interval"`
-		Adj bool `json:"allowoffset"`
+		Adj  bool    `json:"allowoffset"`
 	} `json:"reddit"`
 	Twitter struct {
 		Token string `json:"token"`
 		ToknS string `json:"tokensecret"`
 		Conk  string `json:"key"`
 		Cons  string `json:"keysecret"`
-		Minu  int `json:"minuprate"`
+		Minu  int    `json:"minuprate"`
 	} `json:"twitter"`
 }
 
@@ -121,8 +121,11 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		}
 
 		fmt.Println("Downloading " + link + "... | Post depth : " + strconv.Itoa(d+1))
-		resp, err := http.Get(link)
-		if err != nil {
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+		}
+		resp, err := client.Get(link)
+		if err != nil || resp.StatusCode >= 400 {
 			fmt.Println("Unable to download image!")
 			return
 		}

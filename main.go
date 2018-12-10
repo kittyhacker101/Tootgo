@@ -74,10 +74,6 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 				conf.Reddit.Time = conf.Reddit.Time - 0.4
 			case d <= 25:
 				conf.Reddit.Time = conf.Reddit.Time - 0.2
-			case d <= 30:
-				conf.Reddit.Time = conf.Reddit.Time - 0.1
-			case d < 35:
-				conf.Reddit.Time = conf.Reddit.Time - 0.05
 			case d >= 55:
 				conf.Reddit.Time = conf.Reddit.Time + 0.4
 			case d >= 50:
@@ -96,7 +92,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 
 		link := "none"
 		fmt.Println(s.Title + " https://redd.it/" + s.ID + " (Link : " + s.URL + ")")
-		if strings.HasSuffix(s.URL, ".png") || strings.HasSuffix(s.URL, ".jpg") || strings.HasSuffix(s.URL, ".gif") {
+		if strings.HasSuffix(s.URL, ".png") || strings.HasSuffix(s.URL, ".jpg") || strings.HasSuffix(s.URL, ".gif") || strings.HasSuffix(s.URL, ".mp4") || strings.HasSuffix(s.URL, ".webm") {
 			link = s.URL
 		}
 		if strings.HasSuffix(s.URL, ".gifv") {

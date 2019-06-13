@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"sort"
@@ -40,6 +41,7 @@ type Conf struct {
 	Reddit struct {
 		User string `json:"username"`
 		Pass string `json:"password"`
+		Fix  bool   `json:"fixbadimages"`
 	} `json:"reddit"`
 }
 
@@ -159,13 +161,31 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 		f.Write(body)
 		f.Close()
 
-		img, _, err := media.UploadFile(os.TempDir() + "/" + s.ID + ".png")
-		if err != nil {
-			fmt.Println("Unable to upload media!")
+		var img *twitter.Media
+		if conf.Reddit.Fix {
+			cmnd := exec.Command("ffmpeg", "-i", os.TempDir()+"/"+s.ID+".png", "-lossless", "0", "-compression_level", "6", "-q:v", "80", os.TempDir()+"/"+s.ID+".webp")
+			fmt.Println("Processing image...")
+			err := cmnd.Run()
 			os.Remove(os.TempDir() + "/" + s.ID + ".png")
-			return
+			if err != nil {
+				fmt.Println("Failed to process image! Is ffmpeg installed?")
+				os.Remove(os.TempDir() + "/" + s.ID + ".webp")
+				return // Don't attempt to upload the unprocessed PNG. There's a chance that FFMPEG is installed, and the image is too corrupt for it to process.
+			}
+			img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".webp")
+			os.Remove(os.TempDir() + "/" + s.ID + ".webp")
+			if err != nil {
+				fmt.Println("Unable to upload media!")
+				return
+			}
+		} else {
+			img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".png")
+			os.Remove(os.TempDir() + "/" + s.ID + ".png")
+			if err != nil {
+				fmt.Println("Unable to upload media!")
+				return
+			}
 		}
-		os.Remove(os.TempDir() + "/" + s.ID + ".png")
 
 		_, _, err = status.Update(s.Title+" https://redd.it/"+s.ID, &twitter.StatusUpdateParams{
 			MediaIds:          []int64{img.MediaID},

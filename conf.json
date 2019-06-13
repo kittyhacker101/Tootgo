@@ -20,6 +20,7 @@
 	],
 	"reddit": {
 		"username": "Reddit Username",
-		"password": "Reddit Password"
+		"password": "Reddit Password",
+		"fixbadimages": true
 	}
 }

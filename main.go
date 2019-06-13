@@ -10,36 +10,52 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/signal"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 type Conf struct {
+	Bots []struct {
+		Twitter struct {
+			Token string `json:"token"`
+			ToknS string `json:"tokensecret"`
+			Conk  string `json:"key"`
+			Cons  string `json:"keysecret"`
+		} `json:"twitter"`
+		Timing struct {
+			Time float64 `json:"interval"`
+			Adj  bool    `json:"allowoffset"`
+		} `json:"timing"`
+		Reddit struct {
+			Mon  []string `json:"subreddits"`
+			Minu int      `json:"minuprate"`
+			Igv  bool     `json:"ignoreunknown"`
+		} `json:"reddit"`
+	} `json:"bots"`
 	Reddit struct {
-		User string  `json:"username"`
-		Pass string  `json:"password"`
-		Mon  string  `json:"subreddit"`
-		Time float64 `json:"interval"`
-		Adj  bool    `json:"allowoffset"`
+		User string `json:"username"`
+		Pass string `json:"password"`
 	} `json:"reddit"`
-	Twitter struct {
-		Token string `json:"token"`
-		ToknS string `json:"tokensecret"`
-		Conk  string `json:"key"`
-		Cons  string `json:"keysecret"`
-		Minu  int    `json:"minuprate"`
-	} `json:"twitter"`
 }
 
 var (
 	conf Conf
 )
 
-func download(session *geddit.LoginSession, status *twitter.StatusService, media *twitter.MediaService) {
+func download(id int, session *geddit.LoginSession, status *twitter.StatusService, media *twitter.MediaService) {
 	var posts []string
-	submissions, err := session.SubredditSubmissions(conf.Reddit.Mon, geddit.HotSubmissions, geddit.ListingOptions{
+	var subreddit string
+	for _, sub := range conf.Bots[id].Reddit.Mon {
+		subreddit = subreddit + "+" + sub
+	}
+	subreddit = strings.TrimPrefix(subreddit, "+")
+
+	submissions, err := session.SubredditSubmissions(subreddit, geddit.HotSubmissions, geddit.ListingOptions{
 		Limit: 60,
 	})
 	if err != nil {
@@ -47,7 +63,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		return
 	}
 
-	f, err := os.OpenFile("posts.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
+	f, err := os.OpenFile(strconv.Itoa(id)+"_posts.txt", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		fmt.Println("Unable to load database!")
 		return
@@ -64,25 +80,25 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		if i < len(posts) && posts[i] == s.ID {
 			continue
 		}
-		if conf.Reddit.Adj {
+		if conf.Bots[id].Timing.Adj {
 			upv := float64(s.Ups) / time.Since(time.Unix(int64(s.DateCreated), 0)).Hours()
-			fmt.Println("Upvotes/hour : " + strconv.Itoa(int(upv)) + " | Post timing : " + strconv.FormatFloat(conf.Reddit.Time, 'f', -1, 64))
+			fmt.Println("Subreddits: " + subreddit + " | Upvotes/hour: " + strconv.Itoa(int(upv)) + " | Post timing: " + strconv.FormatFloat(conf.Bots[id].Timing.Time, 'f', -1, 64))
 			switch {
 			case d <= 15:
-				conf.Reddit.Time = conf.Reddit.Time - 0.8
+				conf.Bots[id].Timing.Time = conf.Bots[id].Timing.Time - 0.8
 			case d <= 20:
-				conf.Reddit.Time = conf.Reddit.Time - 0.4
+				conf.Bots[id].Timing.Time = conf.Bots[id].Timing.Time - 0.4
 			case d <= 25:
-				conf.Reddit.Time = conf.Reddit.Time - 0.2
+				conf.Bots[id].Timing.Time = conf.Bots[id].Timing.Time - 0.2
 			case d >= 55:
-				conf.Reddit.Time = conf.Reddit.Time + 0.4
+				conf.Bots[id].Timing.Time = conf.Bots[id].Timing.Time + 0.4
 			case d >= 50:
-				conf.Reddit.Time = conf.Reddit.Time + 0.2
+				conf.Bots[id].Timing.Time = conf.Bots[id].Timing.Time + 0.2
 			case d >= 45:
-				conf.Reddit.Time = conf.Reddit.Time + 0.1
+				conf.Bots[id].Timing.Time = conf.Bots[id].Timing.Time + 0.1
 			case d > 40:
-				conf.Reddit.Time = conf.Reddit.Time + 0.05
-			case int(upv) < conf.Twitter.Minu:
+				conf.Bots[id].Timing.Time = conf.Bots[id].Timing.Time + 0.05
+			case int(upv) < conf.Bots[id].Reddit.Minu:
 				fmt.Println("Post https://redd.it/" + s.ID + " has been skipped!")
 				continue
 			}
@@ -92,7 +108,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 
 		link := "none"
 		fmt.Println(s.Title + " https://redd.it/" + s.ID + " (Link : " + s.URL + ")")
-		if strings.HasSuffix(s.URL, ".png") || strings.HasSuffix(s.URL, ".jpg") || strings.HasSuffix(s.URL, ".gif") || strings.HasSuffix(s.URL, ".mp4") || strings.HasSuffix(s.URL, ".webm") {
+		if strings.HasSuffix(s.URL, ".png") || strings.HasSuffix(s.URL, ".jpg") || strings.HasSuffix(s.URL, ".gif") || strings.HasSuffix(s.URL, ".webp") {
 			link = s.URL
 		}
 		if strings.HasSuffix(s.URL, ".gifv") {
@@ -104,7 +120,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		if strings.HasPrefix(s.URL, "https://imgur.com/") {
 			link = "https://i.imgur.com/" + strings.TrimPrefix(s.URL, "https://imgur.com/") + ".jpg"
 		}
-		if link == "none" {
+		if link == "none" && !conf.Bots[id].Reddit.Igv {
 			fmt.Println("Linking https://redd.it/" + s.ID + "... | Post depth : " + strconv.Itoa(d+1))
 			_, _, err = status.Update(s.Title+" https://redd.it/"+s.ID, &twitter.StatusUpdateParams{
 				PossiblySensitive: &s.IsNSFW,
@@ -113,6 +129,8 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 				fmt.Println("Unable to post tweet!")
 			}
 			fmt.Println("Link posted to Twitter!")
+			return
+		} else if link == "none" {
 			return
 		}
 
@@ -144,6 +162,7 @@ func download(session *geddit.LoginSession, status *twitter.StatusService, media
 		img, _, err := media.UploadFile(os.TempDir() + "/" + s.ID + ".png")
 		if err != nil {
 			fmt.Println("Unable to upload media!")
+			os.Remove(os.TempDir() + "/" + s.ID + ".png")
 			return
 		}
 		os.Remove(os.TempDir() + "/" + s.ID + ".png")
@@ -172,6 +191,10 @@ func main() {
 		return
 	}
 
+	if len(conf.Bots) == 0 {
+		fmt.Println("You must specify at least one bot account for Tootgo to manage.")
+	}
+
 	session, err := geddit.NewLoginSession(
 		conf.Reddit.User,
 		conf.Reddit.Pass,
@@ -182,20 +205,36 @@ func main() {
 		return
 	}
 
-	config := oauth1.NewConfig(conf.Twitter.Conk, conf.Twitter.Cons)
-	token := oauth1.NewToken(conf.Twitter.Token, conf.Twitter.ToknS)
-	httpClient := config.Client(oauth1.NoContext, token)
-	client := twitter.NewClient(httpClient)
-
-	download(session, client.Statuses, client.Media)
-
-	ticker := time.NewTicker(time.Minute * time.Duration(conf.Reddit.Time))
-	for {
-		select {
-		case <-ticker.C:
-			download(session, client.Statuses, client.Media)
-			ticker.Stop()
-			ticker = time.NewTicker(time.Minute * time.Duration(conf.Reddit.Time))
-		}
+	if len(conf.Bots)/16 < runtime.NumCPU() || len(conf.Bots) > 16 {
+		runtime.GOMAXPROCS(len(conf.Bots) / 16)
+	} else if len(conf.Bots) <= 16 {
+		runtime.GOMAXPROCS(1)
 	}
+
+	for id := range conf.Bots {
+		go func(id int) {
+			config := oauth1.NewConfig(conf.Bots[id].Twitter.Conk, conf.Bots[id].Twitter.Cons)
+			token := oauth1.NewToken(conf.Bots[id].Twitter.Token, conf.Bots[id].Twitter.ToknS)
+			httpClient := config.Client(oauth1.NoContext, token)
+			client := twitter.NewClient(httpClient)
+
+			download(id, session, client.Statuses, client.Media)
+			runtime.GC()
+
+			ticker := time.NewTicker(time.Minute * time.Duration(conf.Bots[id].Timing.Time))
+			for {
+				select {
+				case <-ticker.C:
+					download(id, session, client.Statuses, client.Media)
+					runtime.GC()
+					ticker.Stop()
+					ticker = time.NewTicker(time.Minute * time.Duration(conf.Bots[id].Timing.Time))
+				}
+			}
+		}(id)
+	}
+	cr := make(chan os.Signal, 1)
+	signal.Notify(cr, syscall.SIGHUP)
+	<-cr
+	fmt.Println("Stopping Tootgo...")
 }

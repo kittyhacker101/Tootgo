@@ -1,16 +1,25 @@
 {
+	"bots": [
+		{
+			"twitter": {
+				"token": "Twitter Access Token",
+				"tokensecret": "Twitter Access Token Secret",
+				"key": "Twitter API Key",
+				"keysecret": "Twitter API Secret"
+			},
+			"timing": {
+				"interval": 20,
+				"allowoffset": true
+			},
+			"reddit": {
+				"subreddits": ["Subreddit to mirror"],
+				"minuprate": 1,
+				"ignoreunknown": true
+			}
+		}
+	],
 	"reddit": {
 		"username": "Reddit Username",
-		"password": "Reddit Password",
-		"subreddit": "Subreddit to mirror",
-		"interval": 1,
-		"allowoffset": false
-	},
-	"twitter": {
-		"token": "Twitter Access Token",
-		"tokensecret": "Twitter Access Token Secret",
-		"key": "Twitter API Key",
-		"keysecret": "Twitter API Secret",
-		"minuprate": 2
+		"password": "Reddit Password"
 	}
 }

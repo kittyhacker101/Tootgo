@@ -9,11 +9,11 @@
 			},
 			"timing": {
 				"interval": 20,
-				"allowoffset": true
+				"allowoffset": false
 			},
 			"reddit": {
 				"subreddits": ["Subreddit to mirror"],
-				"minuprate": 1,
+				"minuprate": 0,
 				"ignoreunknown": true
 			}
 		}
@@ -21,6 +21,6 @@
 	"reddit": {
 		"username": "Reddit Username",
 		"password": "Reddit Password",
-		"fixbadimages": true
+		"fixbadimages": false
 	}
 }

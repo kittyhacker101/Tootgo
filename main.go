@@ -130,12 +130,18 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 			})
 			if err != nil {
 				fmt.Println("Unable to post tweet!")
+				return
 			}
 			fmt.Println("Link posted to Twitter!")
 			return
 		} else if link == "none" {
 			fmt.Println("Unable to find image, skipping...")
-			return
+			continue
+		}
+
+		isGif := false
+		if strings.HasSuffix(s.URL, ".gif") {
+			isGif = true
 		}
 
 		fmt.Println("Downloading " + link + "... | Post depth : " + strconv.Itoa(d+1))
@@ -145,14 +151,15 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 		resp, err := client.Get(link)
 		if err != nil || resp.StatusCode >= 400 {
 			fmt.Println("Unable to download image!")
+			resp.Body.Close()
 			return
 		}
 		body, err := ioutil.ReadAll(resp.Body)
+		resp.Body.Close()
 		if err != nil {
 			fmt.Println("Unable to read response!")
 			return
 		}
-		resp.Body.Close()
 
 		// I'll name it a .png even if it isn't, and let Twitter sort it out ¯\_(ツ)_/¯
 		f, err = os.Create(os.TempDir() + "/" + s.ID + ".png")
@@ -176,20 +183,38 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 
 		var img *twitter.Media
 		if conf.Reddit.Fix {
-			cmnd := exec.Command("ffmpeg", "-i", os.TempDir()+"/"+s.ID+".png", "-lossless", "0", "-compression_level", "6", "-q:v", "80", os.TempDir()+"/"+s.ID+".webp")
-			fmt.Println("Processing image...")
-			err := cmnd.Run()
-			os.Remove(os.TempDir() + "/" + s.ID + ".png")
-			if err != nil {
-				fmt.Println("Failed to process image! Is ffmpeg installed?")
+			if isGif {
+				cmnd := exec.Command("ffmpeg", "-i", os.TempDir()+"/"+s.ID+".png", "-y", os.TempDir()+"/"+s.ID+".gif")
+				fmt.Println("Processing image...")
+				err := cmnd.Run()
+				os.Remove(os.TempDir() + "/" + s.ID + ".png")
+				if err != nil {
+					fmt.Println("Failed to process image! Is ffmpeg installed?")
+					os.Remove(os.TempDir() + "/" + s.ID + ".gif")
+					return // Don't attempt to upload the unprocessed image. There's a chance that FFMPEG is installed, and the image is too corrupt for it to process.
+				}
+				img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".gif")
+				os.Remove(os.TempDir() + "/" + s.ID + ".gif")
+				if err != nil {
+					fmt.Println("Unable to upload media!")
+					return
+				}
+			} else {
+				cmnd := exec.Command("ffmpeg", "-i", os.TempDir()+"/"+s.ID+".png", "-lossless", "0", "-compression_level", "6", "-q:v", "80", "-y", os.TempDir()+"/"+s.ID+".webp")
+				fmt.Println("Processing image...")
+				err := cmnd.Run()
+				os.Remove(os.TempDir() + "/" + s.ID + ".png")
+				if err != nil {
+					fmt.Println("Failed to process image! Is ffmpeg installed?")
+					os.Remove(os.TempDir() + "/" + s.ID + ".webp")
+					return // Don't attempt to upload the unprocessed image. There's a chance that FFMPEG is installed, and the image is too corrupt for it to process.
+				}
+				img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".webp")
 				os.Remove(os.TempDir() + "/" + s.ID + ".webp")
-				return // Don't attempt to upload the unprocessed PNG. There's a chance that FFMPEG is installed, and the image is too corrupt for it to process.
-			}
-			img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".webp")
-			os.Remove(os.TempDir() + "/" + s.ID + ".webp")
-			if err != nil {
-				fmt.Println("Unable to upload media!")
-				return
+				if err != nil {
+					fmt.Println("Unable to upload media!")
+					return
+				}
 			}
 		} else {
 			img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".png")
@@ -211,6 +236,7 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 
 		return
 	}
+	f.Close()
 }
 
 func loginAndPost(id int) {

@@ -203,6 +203,7 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 
 				if fi.Size() > 4950000 {
 					fmt.Println("File is too big to upload!")
+					os.Remove(os.TempDir() + "/" + s.ID + ".gif")
 					return
 				}
 
@@ -232,6 +233,7 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 
 				if fi.Size() > 4950000 {
 					fmt.Println("File is too big to upload!")
+					os.Remove(os.TempDir() + "/" + s.ID + ".webp")
 					return
 				}
 

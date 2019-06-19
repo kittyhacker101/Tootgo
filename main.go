@@ -136,7 +136,7 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 			return
 		} else if link == "none" {
 			fmt.Println("Unable to find image, skipping...")
-			continue
+			return
 		}
 
 		isGif := false
@@ -193,6 +193,19 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 					os.Remove(os.TempDir() + "/" + s.ID + ".gif")
 					return // Don't attempt to upload the unprocessed image. There's a chance that FFMPEG is installed, and the image is too corrupt for it to process.
 				}
+
+				fi, err := os.Stat(os.TempDir() + "/" + s.ID + ".gif")
+				f.Close()
+				if err != nil {
+					fmt.Println("Unable to get image info!")
+					return
+				}
+
+				if fi.Size() > 4950000 {
+					fmt.Println("File is too big to upload!")
+					return
+				}
+
 				img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".gif")
 				os.Remove(os.TempDir() + "/" + s.ID + ".gif")
 				if err != nil {
@@ -209,6 +222,19 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 					os.Remove(os.TempDir() + "/" + s.ID + ".webp")
 					return // Don't attempt to upload the unprocessed image. There's a chance that FFMPEG is installed, and the image is too corrupt for it to process.
 				}
+
+				fi, err := os.Stat(os.TempDir() + "/" + s.ID + ".webp")
+				f.Close()
+				if err != nil {
+					fmt.Println("Unable to get image info!")
+					return
+				}
+
+				if fi.Size() > 4950000 {
+					fmt.Println("File is too big to upload!")
+					return
+				}
+
 				img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".webp")
 				os.Remove(os.TempDir() + "/" + s.ID + ".webp")
 				if err != nil {
@@ -281,16 +307,13 @@ func main() {
 
 	for id := range conf.Bots {
 		go func(id int) {
-			loginAndPost(id)
-			runtime.GC()
-			ticker := time.NewTicker(time.Minute * time.Duration(conf.Bots[id].Timing.Time))
 			for {
-				select {
-				case <-ticker.C:
-					loginAndPost(id)
-					ticker.Stop()
-					ticker = time.NewTicker(time.Minute * time.Duration(conf.Bots[id].Timing.Time))
-					runtime.GC()
+				loginAndPost(id)
+				runtime.GC()
+				if conf.Bots[id].Timing.Adj && conf.Bots[id].Timing.Time > 5 {
+					time.Sleep(time.Minute * time.Duration(conf.Bots[id].Timing.Time))
+				} else {
+					time.Sleep(5 * time.Minute)
 				}
 			}
 		}(id)

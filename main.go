@@ -312,7 +312,7 @@ func main() {
 			for {
 				loginAndPost(id)
 				runtime.GC()
-				if conf.Bots[id].Timing.Adj && conf.Bots[id].Timing.Time > 5 {
+				if conf.Bots[id].Timing.Adj || conf.Bots[id].Timing.Time > 5 {
 					time.Sleep(time.Minute * time.Duration(conf.Bots[id].Timing.Time))
 				} else {
 					time.Sleep(5 * time.Minute)

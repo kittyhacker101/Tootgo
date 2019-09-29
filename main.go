@@ -210,7 +210,7 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 				img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".gif")
 				os.Remove(os.TempDir() + "/" + s.ID + ".gif")
 				if err != nil {
-					fmt.Println("Unable to upload media!")
+					fmt.Println("Unable to upload media! Error: " + err.Error())
 					return
 				}
 			} else {
@@ -240,7 +240,7 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 				img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".webp")
 				os.Remove(os.TempDir() + "/" + s.ID + ".webp")
 				if err != nil {
-					fmt.Println("Unable to upload media!")
+					fmt.Println("Unable to upload media! Error: " + err.Error())
 					return
 				}
 			}
@@ -248,7 +248,7 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 			img, _, err = media.UploadFile(os.TempDir() + "/" + s.ID + ".png")
 			os.Remove(os.TempDir() + "/" + s.ID + ".png")
 			if err != nil {
-				fmt.Println("Unable to upload media!")
+				fmt.Println("Unable to upload media! Error: " + err.Error())
 				return
 			}
 		}

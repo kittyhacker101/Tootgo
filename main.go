@@ -151,7 +151,9 @@ func download(id int, session *geddit.LoginSession, status *twitter.StatusServic
 		resp, err := client.Get(link)
 		if err != nil || resp.StatusCode >= 400 {
 			fmt.Println("Unable to download image!")
-			resp.Body.Close()
+			if resp.Body != nil {
+				resp.Body.Close()
+			}
 			return
 		}
 		body, err := ioutil.ReadAll(resp.Body)
